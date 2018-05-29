@@ -9,6 +9,7 @@ resampled_img_path='/home/javier/Documents/DOCUMENTOS/Microbleeds/GoDARTS/DataRe
 resampled_GT_path='/home/javier/Documents/DOCUMENTOS/Microbleeds/GoDARTS/gtResampled/';
 original_GT_path='/home/javier/Documents/DOCUMENTOS/Microbleeds/GoDARTS/gt/';
 save_path='/home/javier/Documents/DOCUMENTOS/Microbleeds/GoDARTS/centersResampled/';
+save_patches_path='/home/javier/Documents/DOCUMENTOS/Microbleeds/GoDARTS/PatchesWithMicrobleeds/';
 patch_size=[16 16 10];
 
 
@@ -81,22 +82,23 @@ for jj = 1:l1
     
     filter = find(copy<filterChoice);
     copy(filter)=0;
-    patches_resampled_filtered=bwconncomp (copy,6);
-    
+    [patches_resampled_filtered,numberFound]=bwlabeln (copy,6);
+
     %Now it is time to work with the coordinates of the mask ( where the
     %microbleeds are drawn and crop the patches from the original image.
     %First step will be to find the center of the microbleeds.
-    all_centers=[]
-    for ii = 1:patches_resampled_filtered.NumObjects
+    all_centers=[];
+
+    for ii = 1:numberFound
         
-        current_block = cell2mat(patches_resampled_filtered.PixelIdxList(ii));
+        current_block = find(patches_resampled_filtered == ii);
         
         %for the depth it is quite easy since we can find the first element
         %of the current block and the last one and we can easily find the
         %center by getting the middle point. 
         [~,~,z1] = ind2sub(size(copy),current_block(1));
         [~,~,z2] = ind2sub(size(copy),current_block(end));
-        z=z1+floor((z2-z1)/2);
+        z=z1+floor((z2-z1)/2);       
         %Now it is possible to go to the layer specified by z and find the
         %central point in the other two dimensions. This way, we can assume
         %that the first point >0 that we encounter on that layer will be
@@ -107,7 +109,8 @@ for jj = 1:l1
         
         %Sum (asda,1) Colapsa sobre 1xm
         %sum (asda,2) Colapsa sobre nx1
-        auxlayer=copy(:,:,z);
+        copy2 = patches_resampled_filtered == ii;
+        auxlayer=copy2(:,:,z);
         auxCols=sum(auxlayer,1);%Here we can get the first and the last column with values (sum over rows)
         auxRows=sum(auxlayer,2);%Here we can get the first and last row with values. (sum over columns)
         
@@ -137,20 +140,42 @@ end
 
 %% Extract Patches with Microbleeds based on the centers and the centers obtained with the previous step
 
+
+patch_size=[16 16 10];
+
+
 resampled_img_files= dir(resampled_img_path);
 centers_files = dir(save_path);
 
 resampled_img_files(1:2)=[];%To delete the first to elements that are junk
-original_gt_files(1:3)=[];%ONE MORE HERE BECAUSE THERE WAS SOME JUNK FROM R
-
+centers_files(1:2)=[];
+centers_files(end)=[];
 l1=length(resampled_img_files);
-l2=length(resampled_gt_files);
-l3=length(original_gt_files);
+l2=length(centers_files);
 
-if (isequal(l1,l2,l3)==0)
+
+if (isequal(l1,l2)==0)
     fprintf ( 2, 'Error! There is not the same number of files in the directories!\n' );
     fprintf ( 2, 'Closing the Script. Retry again!\n' );
     return
 end
 
+counter=1;
+auxPatchSize=patch_size/2;
+for jj = 1:l1
+    %Load the image to take the patches from 
+    nii_resampled_img = load_untouch_nii([resampled_img_path resampled_img_files(jj).name]);
+    currentImage=nii_resampled_img.img;
+    
+    %load the centers for the current image
+    load(strcat(save_path,centers_files(jj).name),'-mat');
+    for ii=1:size(all_centers,1)
+        currentCenter=all_centers(ii,:);
+        patch=currentImage(currentCenter(1)-auxPatchSize(1):currentCenter(1)+auxPatchSize(1)-1,currentCenter(2)-auxPatchSize(2):currentCenter(2)+auxPatchSize(2)-1,currentCenter(3)-auxPatchSize(3):currentCenter(3)+auxPatchSize(3)-1);
+        save(char(strcat(save_patches_path,string(counter))),'patch');
+        counter=counter+1;
+    end
+
+    
+end
 
